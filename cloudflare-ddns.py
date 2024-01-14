@@ -181,6 +181,7 @@ def getIPsFromCloudFlare():
                 if purgeUnknownRecords:
                     deleteEntries("AAAA")
     ips = {}
+    global purgeUnknownRecords
     if (a is not None):
         ips["ipv4"] = {
             "type": "A",
@@ -196,6 +197,12 @@ def getIPsFromCloudFlare():
 
 def commitRecord(ip):
     global ttl
+    global wrong_ipv4s
+    global wrong_ipv6s
+    if ip["type"] == 'ipv4' and ip['ip'] in wrong_ipv4s:
+        return
+    if ip["type"] == 'ipv6' and ip['ip'] in wrong_ipv6s:
+        return
     for option in config["cloudflare"]:
         subdomains = option["subdomains"]
         response = cf_api("zones/" + option['zone_id'], "GET", option)
@@ -332,6 +339,8 @@ if __name__ == '__main__':
     ipv6_enabled = True
     purgeUnknownRecords = False
     get_ip_from_CN = True  # 优先从国内获取ip，防止1.1.1.1无法访问，或者他加了代理，获取到的是代理的ip
+    wrong_ipv4s = None  # 错误的ip，如果获取到这个ip，则不进去上报，这个上报会有问题
+    wrong_ipv6s = None  # 错误的ip，如果获取到这个ip，则不进去上报，这个上报会有问题
 
     if sys.version_info < (3, 5):
         raise Exception("🐍 This script requires Python 3.5+")
@@ -346,10 +355,12 @@ if __name__ == '__main__':
         time.sleep(10)
 
     if config is not None:
+        get_ip_from_CN = config.get('get_ip_from_CN')
+        wrong_ipv4s = config.get('wrong_ipv4s')
+        wrong_ipv6s = config.get('wrong_ipv6s')
         try:
             ipv4_enabled = config["a"]
             ipv6_enabled = config["aaaa"]
-            get_ip_from_CN = config['get_ip_from_CN']
         except:
             ipv4_enabled = True
             ipv6_enabled = True
