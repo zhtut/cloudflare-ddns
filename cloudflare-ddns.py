@@ -124,6 +124,31 @@ def getIPs():
         ips = getIPsFromCloudFlare()
     return ips
 
+def get_host_ipv4(host):
+    import socket
+    try:
+        info = socket.getaddrinfo(host, None, socket.AF_INET)
+        ip = info[0][4][0]
+        return ip
+    except socket.gaierror:
+        print("There was an error resolving the hostname for IPv6.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    return None
+
+
+def get_host_ipv6(host):
+    import socket
+    try:
+        info = socket.getaddrinfo(host, None, socket.AF_INET6)
+        ip = info[0][4][0]
+        return ip
+    except socket.gaierror:
+        print("There was an error resolving the hostname for IPv6.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    return None
+
 
 def getIPsFromCloudFlare():
     a = None
@@ -199,10 +224,16 @@ def commitRecord(ip):
     global ttl
     global wrong_ipv4s
     global wrong_ipv6s
-    if ip["type"] == 'ipv4' and ip['ip'] in wrong_ipv4s:
-        return
-    if ip["type"] == 'ipv6' and ip['ip'] in wrong_ipv6s:
-        return
+    if ip["type"] == 'ipv4':
+        for wrong in wrong_ipv4s:
+            get_ip = get_host_ipv4(wrong)
+            if get_ip == ip['ip']:
+                return
+    if ip["type"] == 'ipv6':
+        for wrong in wrong_ipv6s:
+            get_ip = get_host_ipv6(wrong)
+            if get_ip == ip['ip']:
+                return
     for option in config["cloudflare"]:
         subdomains = option["subdomains"]
         response = cf_api("zones/" + option['zone_id'], "GET", option)
