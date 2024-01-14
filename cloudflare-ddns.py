@@ -50,7 +50,82 @@ def deleteEntries(type):
             print("🗑️ Deleted stale record " + identifier)
 
 
+def getIPsFromCN():
+    a = None
+    aaaa = None
+    global ipv4_enabled
+    global ipv6_enabled
+    global purgeUnknownRecords
+    if ipv4_enabled:
+        try:
+            json = requests.get(
+                "https://4.ipw.cn/api/ip/myip?json").json()
+            a = json["IP"]
+        except Exception:
+            global shown_ipv4_warning
+            if not shown_ipv4_warning:
+                shown_ipv4_warning = True
+                print("🧩 IPv4 not detected via ip.cn, trying ipplus360")
+            # Try secondary IP check
+            try:
+                json = requests.get("https://www.ipplus360.com/getIP").json()
+                a = json["data"]
+            except Exception:
+                global shown_ipv4_warning_secondary
+                if not shown_ipv4_warning_secondary:
+                    shown_ipv4_warning_secondary = True
+                    print("🧩 IPv4 not detected via ipplus360. ")
+                if purgeUnknownRecords:
+                    deleteEntries("A")
+    if ipv6_enabled:
+        try:
+            json = requests.get(
+                "https://6.ipw.cn/api/ip/myip?json").json()
+            aaaa = json["IP"]
+        except Exception:
+            global shown_ipv6_warning
+            if not shown_ipv6_warning:
+                shown_ipv6_warning = True
+                print("🧩 IPv6 not detected via ipw.cn, trying myip.la")
+            try:
+                json = requests.get(
+                    "https://v6.myip.la/json").json()
+                aaaa = json["ip"]
+            except Exception:
+                global shown_ipv6_warning_secondary
+                if not shown_ipv6_warning_secondary:
+                    shown_ipv6_warning_secondary = True
+                    print(
+                        "🧩 IPv6 not detected via 1.0.0.1. Verify your ISP or DNS provider isn't blocking Cloudflare's IPs.")
+                if purgeUnknownRecords:
+                    deleteEntries("AAAA")
+    ips = {}
+    if (a is not None):
+        ips["ipv4"] = {
+            "type": "A",
+            "ip": a
+        }
+    if (aaaa is not None):
+        ips["ipv6"] = {
+            "type": "AAAA",
+            "ip": aaaa
+        }
+    return ips
+
+
 def getIPs():
+    ips = None
+    global get_ip_from_CN
+    if get_ip_from_CN:
+        ips = getIPsFromCN()
+        if not ips or len(ips) == 0:
+            ips = getIPsFromCloudFlare()
+    else:
+        ips = getIPsFromCloudFlare()
+    return ips
+
+
+def getIPsFromCloudFlare():
     a = None
     aaaa = None
     global ipv4_enabled
@@ -77,7 +152,8 @@ def getIPs():
                 global shown_ipv4_warning_secondary
                 if not shown_ipv4_warning_secondary:
                     shown_ipv4_warning_secondary = True
-                    print("🧩 IPv4 not detected via 1.0.0.1. Verify your ISP or DNS provider isn't blocking Cloudflare's IPs.")
+                    print(
+                        "🧩 IPv4 not detected via 1.0.0.1. Verify your ISP or DNS provider isn't blocking Cloudflare's IPs.")
                 if purgeUnknownRecords:
                     deleteEntries("A")
     if ipv6_enabled:
@@ -100,7 +176,8 @@ def getIPs():
                 global shown_ipv6_warning_secondary
                 if not shown_ipv6_warning_secondary:
                     shown_ipv6_warning_secondary = True
-                    print("🧩 IPv6 not detected via 1.0.0.1. Verify your ISP or DNS provider isn't blocking Cloudflare's IPs.")
+                    print(
+                        "🧩 IPv6 not detected via 1.0.0.1. Verify your ISP or DNS provider isn't blocking Cloudflare's IPs.")
                 if purgeUnknownRecords:
                     deleteEntries("AAAA")
     ips = {}
@@ -162,7 +239,8 @@ def commitRecord(ip):
                                 duplicate_ids.append(r["id"])
                         else:
                             identifier = r["id"]
-                            if r['content'] != record['content'] or r['proxied'] != record['proxied']:
+                            if r['content'] != record['content'] or r['proxied'] != record[
+                                'proxied']:
                                 modified = True
             if identifier:
                 if modified:
@@ -187,7 +265,6 @@ def commitRecord(ip):
 
 
 def updateLoadBalancer(ip):
-
     for option in config["load_balancer"]:
         pools = cf_api('user/load_balancers/pools', 'GET', option)
 
@@ -203,7 +280,8 @@ def updateLoadBalancer(ip):
             origins[idx]['address'] = ip['ip']
             data = {'origins': origins}
 
-            response = cf_api(f'user/load_balancers/pools/{option["pool_id"]}', 'PATCH', option, {}, data)
+            response = cf_api(f'user/load_balancers/pools/{option["pool_id"]}', 'PATCH', option, {},
+                              data)
 
 
 def cf_api(endpoint, method, config, headers={}, data=False):
@@ -242,7 +320,7 @@ def cf_api(endpoint, method, config, headers={}, data=False):
 def updateIPs(ips):
     for ip in ips.values():
         commitRecord(ip)
-        #updateLoadBalancer(ip)
+        # updateLoadBalancer(ip)
 
 
 if __name__ == '__main__':
@@ -253,6 +331,7 @@ if __name__ == '__main__':
     ipv4_enabled = True
     ipv6_enabled = True
     purgeUnknownRecords = False
+    get_ip_from_CN = True  # 优先从国内获取ip，防止1.1.1.1无法访问，或者他加了代理，获取到的是代理的ip
 
     if sys.version_info < (3, 5):
         raise Exception("🐍 This script requires Python 3.5+")
@@ -270,10 +349,12 @@ if __name__ == '__main__':
         try:
             ipv4_enabled = config["a"]
             ipv6_enabled = config["aaaa"]
+            get_ip_from_CN = config['get_ip_from_CN']
         except:
             ipv4_enabled = True
             ipv6_enabled = True
-            print("⚙️ Individually disable IPv4 or IPv6 with new config.json options. Read more about it here: https://github.com/timothymiller/cloudflare-ddns/blob/master/README.md")
+            print(
+                "⚙️ Individually disable IPv4 or IPv6 with new config.json options. Read more about it here: https://github.com/timothymiller/cloudflare-ddns/blob/master/README.md")
         try:
             purgeUnknownRecords = config["purgeUnknownRecords"]
         except:
