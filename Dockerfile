@@ -6,7 +6,7 @@ FROM python:alpine AS base
 FROM base AS dependencies
 # install dependencies
 COPY requirements.txt .
-RUN pip install --user -r requirements.txt
+RUN pip install --user -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 #
 # ---- Release ----
