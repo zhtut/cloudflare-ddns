@@ -181,7 +181,7 @@ def getIPsFromCloudFlare():
                 if purgeUnknownRecords:
                     deleteEntries("AAAA")
     ips = {}
-    global purgeUnknownRecords
+    
     if (a is not None):
         ips["ipv4"] = {
             "type": "A",
